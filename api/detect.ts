@@ -120,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (trimmed.length === 0) return res.status(400).json({ error: 'Empty input' });
   if (trimmed.length > 2000) return res.status(400).json({ error: 'Input too long' });
 
-  const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 
   const domain = extractDomain(trimmed);
