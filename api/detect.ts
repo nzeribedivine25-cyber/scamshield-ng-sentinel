@@ -3,7 +3,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const COMMUNITY_THRESHOLD = 3;
 const SUPABASE_URL = 'https://wtslnanmrijcmgabnpgg.supabase.co';
 
-// ── WHITELIST ────────────────────────────────────────────────────────────────
 const GOV_PRESIDENCY = ['statehouse.gov.ng','vpo.gov.ng','nass.gov.ng','senate.gov.ng','hon.gov.ng','supremecourt.gov.ng','courtofappeal.gov.ng','services.gov.ng'];
 const GOV_MINISTRIES = ['finance.gov.ng','health.gov.ng','education.gov.ng','foreignaffairs.gov.ng','justice.gov.ng','defence.gov.ng','fmcide.gov.ng','fmard.gov.ng','works.gov.ng','aviation.gov.ng','fmino.gov.ng','scienceandtech.gov.ng','interior.gov.ng','power.gov.ng','petroleum.gov.ng','trade.gov.ng','labour.gov.ng','housing.gov.ng','transport.gov.ng','women.gov.ng','youth.gov.ng','sports.gov.ng','environment.gov.ng','water.gov.ng'];
 const GOV_FINANCE = ['cbn.gov.ng','firs.gov.ng','customs.gov.ng','cac.gov.ng','dmo.gov.ng','budgetoffice.gov.ng','nipc.gov.ng','bpp.gov.ng','smedan.gov.ng','nse.com.ng','ngxgroup.com','sec.gov.ng','pencom.gov.ng','nnpcgroup.com','nmdpra.gov.ng'];
@@ -14,7 +13,7 @@ const UNIVERSITIES_FEDERAL = ['atbu.edu.ng','abu.edu.ng','buk.edu.ng','fugashua.
 const UNIVERSITIES_OTHER = ['babcock.edu.ng','iuokada.edu.ng','madonnauniversity.edu.ng','bowen.edu.ng','biu.edu.ng','covenantuniversity.edu.ng','pau.edu.ng','aun.edu.ng','acu.edu.ng','nileuniversity.edu.ng','lmu.edu.ng','afe.edu.ng','redeemers.edu.ng','baze.edu.ng','adelekeuniversity.edu.ng','caluniversity.edu.ng','landmark.edu.ng','westernuniversity.edu.ng','mountaintop.edu.ng','lasu.edu.ng','rsust.edu.ng','imsu.edu.ng','tasued.edu.ng','aaua.edu.ng','kasu.edu.ng','kwasu.edu.ng','nsuk.edu.ng','plasu.edu.ng','tsuniversity.edu.ng','umyu.edu.ng','eksu.edu.ng','ebsu.edu.ng'];
 const NIGERIAN_FINTECH = ['paystack.com','flutterwave.com','interswitch.com','opay.com','palmpay.com','kuda.com','moniepoint.com','teamapt.com','monnify.com','paga.com','carbon.ng','getcarbon.co','fairmoney.ng','piggyvest.com','cowrywise.com','bamboofinance.io','risevest.com','troveapp.co','chaka.ng','gtbank.com','accessbankplc.com','zenithbank.com','firstbanknigeria.com','ubagroup.com','stanbicibtc.com','fcmb.com','unionbankng.com','sterlingbank.com','polaris-bank.com','fidelitybank.ng','ecobank.com','wemabank.com','providusbank.com','vfdmfb.com','quidax.com','buycoins.africa','yellowcard.io'];
 const NIGERIAN_TECH_EDU = ['3mtt.nitda.gov.ng','gebeya.com','mydala.app','dala.gebeya.com','npower.gov.ng','waec.org.ng','waecdirect.org','neco.gov.ng','nbte.gov.ng','nuc.edu.ng','jamb.org.ng','jobberman.com','myjobmag.com','ngcareers.com','hotnigerianjobs.com','scholarshipng.com','scholarshipregion.com','myschoolgist.com','naijascholarships.com','punchng.com','thisdaylive.com','vanguardngr.com','thecable.ng','premiumtimesng.com','channelstv.com','arise.tv','nta.ng','businessday.ng','nairametrics.com','techpoint.africa','mtn.ng','mtn.com.ng','airtel.com.ng','glo.com','9mobile.com.ng','scamshield-ng.vercel.app','scamshieldng.com','scamshield.ng','scamshield-ng-sentinel.vercel.app'];
-const GLOBAL_TRUSTED = ['google.com','gmail.com','youtube.com','microsoft.com','office.com','outlook.com','apple.com','amazon.com','facebook.com','instagram.com','twitter.com','x.com','linkedin.com','whatsapp.com','telegram.org','snapchat.com','tiktok.com','github.com','vercel.app','netlify.app','heroku.com','render.com','railway.app','supabase.com','wikipedia.org','stackoverflow.com','medium.com','un.org','who.int','worldbank.org','unicef.org','anthropic.com','openai.com','gemini.google.com'];
+const GLOBAL_TRUSTED = ['google.com','gmail.com','youtube.com','microsoft.com','office.com','outlook.com','apple.com','amazon.com','walmart.com','aliexpress.com','alibaba.com','facebook.com','instagram.com','twitter.com','x.com','linkedin.com','whatsapp.com','telegram.org','snapchat.com','tiktok.com','github.com','vercel.app','netlify.app','heroku.com','render.com','railway.app','supabase.com','wikipedia.org','stackoverflow.com','medium.com','reddit.com','quora.com','un.org','who.int','worldbank.org','unicef.org','anthropic.com','openai.com','gemini.google.com','shopify.com','etsy.com','ebay.com','netflix.com','spotify.com','airbnb.com','uber.com','zoom.us','slack.com','notion.so','figma.com'];
 
 const WHITELIST_DOMAINS = new Set([...GOV_PRESIDENCY,...GOV_MINISTRIES,...GOV_FINANCE,...GOV_SECURITY,...GOV_SERVICES,...GOV_STATES,...UNIVERSITIES_FEDERAL,...UNIVERSITIES_OTHER,...NIGERIAN_FINTECH,...NIGERIAN_TECH_EDU,...GLOBAL_TRUSTED]);
 
@@ -65,8 +64,9 @@ CRITICAL RULES:
 2. Vercel (.vercel.app), Netlify (.netlify.app), GitHub (.github.io) are developer platforms — NOT scams
 3. An unknown domain alone is NOT enough to flag as suspicious or scam
 4. Nigerian fintechs (Paystack, Flutterwave, Kuda, OPay, PalmPay, Cowrywise, PiggyVest) are SAFE
-5. Only flag SCAM when there is clear evidence of fraud intent
-6. http:// links with no SSL should be flagged as at least suspicious
+5. Well-known global brands (Walmart, Amazon, Netflix, Spotify, Uber etc.) are SAFE
+6. Only flag SCAM when there is clear evidence of fraud intent
+7. http:// links with no SSL should be flagged as at least suspicious
 
 NIGERIAN SCAM PATTERNS:
 - Requests for BVN, NIN, ATM PIN, OTP via message or link
@@ -83,11 +83,13 @@ Content to analyze:
 ${input}
 """
 
-Respond ONLY in this exact JSON format:
+Respond ONLY in this exact JSON format, no other text, no markdown:
 {
-  "verdict": "safe" | "suspicious" | "scam",
-  "explanation": "One plain sentence (max 25 words) for a non-technical Nigerian."
-}`;
+  "verdict": "safe",
+  "explanation": "One plain sentence max 25 words."
+}
+
+The verdict must be exactly one of: safe, suspicious, scam`;
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -101,11 +103,12 @@ Respond ONLY in this exact JSON format:
   const data = await res.json();
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const clean = raw.replace(/```json|```/g, '').trim();
-  return JSON.parse(clean);
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON found in Gemini response');
+  return JSON.parse(jsonMatch[0]);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -113,61 +116,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { input } = req.body;
-
-  // Input validation
   if (!input || typeof input !== 'string') return res.status(400).json({ error: 'Invalid input' });
   const trimmed = input.trim();
   if (trimmed.length === 0) return res.status(400).json({ error: 'Empty input' });
   if (trimmed.length > 2000) return res.status(400).json({ error: 'Input too long' });
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
-
   const domain = extractDomain(trimmed);
 
-  // HTTP (no SSL) flag
   if (trimmed.startsWith('http://')) {
     return res.json({ verdict: 'suspicious', explanation: 'This link has no SSL security (http instead of https). Avoid entering any personal details.', detectedBy: 'heuristic' });
   }
 
-  // Layer 1 — Whitelist
   if (domain && isWhitelisted(domain)) {
     return res.json({ verdict: 'safe', explanation: `${domain} is a verified, trusted Nigerian or global platform.`, detectedBy: 'whitelist' });
   }
 
-  // Layer 2 — Community blacklist
   const reportCount = await getCommunityCount(trimmed, SUPABASE_ANON_KEY);
   if (reportCount >= COMMUNITY_THRESHOLD) {
     return res.json({ verdict: 'scam', explanation: `This has been reported as a scam by ${reportCount} ScamShield users. Avoid it.`, detectedBy: 'community' });
   }
 
-  // Layer 3 — Static blacklist
   if (BLACKLIST_PATTERNS.some(p => p.test(trimmed))) {
     return res.json({ verdict: 'scam', explanation: 'This matches a known Nigerian scam pattern. Do not click or share any personal details.', detectedBy: 'blacklist' });
   }
 
-  // Layer 4a — URL shortener
   if (domain && URL_SHORTENERS.has(domain)) {
     return res.json({ verdict: 'suspicious', explanation: 'This is a shortened link hiding the real destination. Scammers often use these.', detectedBy: 'heuristic' });
   }
 
-  // Layer 4b — Typosquatting
   if (domain && hasTyposquatting(domain)) {
     return res.json({ verdict: 'scam', explanation: 'This domain is impersonating a real Nigerian bank or platform. It is likely a phishing site.', detectedBy: 'heuristic' });
   }
 
-  // Layer 4c — Danger phrases
   const lower = trimmed.toLowerCase();
   if (DANGER_PHRASES.some(p => lower.includes(p))) {
     return res.json({ verdict: 'scam', explanation: 'This message asks for sensitive info like BVN, PIN, or OTP — a clear Nigerian scam tactic.', detectedBy: 'heuristic' });
   }
 
-  // Layer 4d — Suspicious phrases
   if (SUSPICIOUS_PHRASES.some(p => lower.includes(p))) {
     return res.json({ verdict: 'suspicious', explanation: 'This uses language commonly found in Nigerian scam attempts. Verify before trusting it.', detectedBy: 'heuristic' });
   }
 
-  // Layer 5 — Gemini
   try {
     const geminiResult = await callGemini(trimmed, GEMINI_API_KEY);
     return res.json({ ...geminiResult, detectedBy: 'ai' });
