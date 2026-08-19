@@ -517,11 +517,14 @@ A link or message was flagged as ambiguous by faster checks. Your job is to actu
 INVESTIGATION STEPS:
 1. If it's a domain/link: search for it, and where possible visit it. Check what the business/site actually is, how established it looks, and whether there are any scam reports, forum warnings, or news about it.
 2. If it's a message: search for distinctive phrases from it to see if it matches known scam campaigns, or if it matches a real, legitimate program/organization.
-3. Being unfamiliar or having no web presence is a weak signal, not proof of guilt — freshly launched legitimate Nigerian businesses, student projects, and small platforms are common and are NOT automatically scams.
-4. Only mark "scam" when you find real evidence (reports, known fraud patterns, impersonation of a real brand, requests for BVN/OTP/PIN etc). Only mark "suspicious" when something is genuinely unclear or missing basic legitimacy signals. Mark "safe" when your research supports it.
+
+DECISION RULE — follow exactly, do not shortcut this:
+- Mark "safe" ONLY if your research found POSITIVE evidence of legitimacy: real reviews, an established business presence, a working product/site with real content, coverage by real news/press, or it matches a known genuine organization/program.
+- Mark "scam" if you find real evidence of fraud: scam reports, forum/community warnings, impersonation of a real brand, or the content itself contains clear fraud signals (requests for BVN/OTP/PIN/card details, guaranteed-return investment language, advance-fee patterns, etc).
+- Mark "suspicious" if your search finds NOTHING either way — no evidence of legitimacy AND no evidence of fraud. A brand-new domain or message with zero web footprint is exactly how many real scams look before they've been reported, so absence of bad evidence is NOT the same as evidence of safety. Do not default to "safe" just because nothing bad turned up — that requires nothing bad AND something good.
 
 Respond ONLY in this EXACT JSON format, no markdown, no preamble:
-{"verdict":"safe","explanation":"One plain sentence max 30 words for a non-technical Nigerian, mentioning what you found.","evidence":"One short phrase on what the web search showed (or 'no notable results')."}
+{"verdict":"safe","explanation":"One plain sentence max 30 words for a non-technical Nigerian, mentioning what you found.","evidence":"One short phrase on what the web search showed (or 'no notable results either way')."}
 
 The verdict must be exactly one of: safe, suspicious, scam`;
 
