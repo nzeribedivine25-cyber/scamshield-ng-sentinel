@@ -566,9 +566,16 @@ const VERDICT_SEVERITY: Record<string, number> = { safe: 0, suspicious: 1, scam:
 
 async function callAiConsensus(input: string, geminiKey: string, groqKey: string) {
   const [geminiRes, llamaRes] = await Promise.allSettled([
-    geminiKey ? callGemini(input, geminiKey) : Promise.reject(new Error('no key')),
-    groqKey ? callLlama(input, groqKey) : Promise.reject(new Error('no key')),
+    geminiKey ? callGemini(input, geminiKey) : Promise.reject(new Error('no GEMINI_API_KEY set')),
+    groqKey ? callLlama(input, groqKey) : Promise.reject(new Error('no GROQ_API_KEY set')),
   ]);
+
+  if (geminiRes.status === 'rejected') {
+    console.error('Gemini call failed:', geminiRes.reason?.message || geminiRes.reason);
+  }
+  if (llamaRes.status === 'rejected') {
+    console.error('Llama/Groq call failed:', llamaRes.reason?.message || llamaRes.reason);
+  }
 
   const gemini = geminiRes.status === 'fulfilled' ? geminiRes.value : null;
   const llama = llamaRes.status === 'fulfilled' ? llamaRes.value : null;
