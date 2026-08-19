@@ -437,6 +437,190 @@ The verdict must be exactly one of: safe, suspicious, scam`;
 }
 
 // ════════════════════════════════════════════════════════════
+// LLAMA (via Groq) — second AI opinion for the consensus layer
+// ════════════════════════════════════════════════════════════
+async function callLlama(input: string, apiKey: string) {
+  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  const systemPrompt = `You are ScamShield NG, a cybersecurity AI trained on Nigerian and global internet scams, fraud patterns, and phishing tactics.
+
+CRITICAL RULES — FOLLOW EXACTLY:
+1. Nigerian government sites (.gov.ng, .edu.ng, .mil.ng, .org.ng) are ALWAYS safe
+2. Developer/hosting platforms (Vercel, Netlify, GitHub, Railway, Render, Cloudflare) are NEVER scams
+3. An unknown or unfamiliar domain name alone is NEVER enough to flag as suspicious or scam
+4. All Nigerian banks, fintechs, telecoms, news sites are SAFE
+5. All well-known global brands (Amazon, Walmart, Netflix, Google, Apple, Microsoft, etc.) are SAFE
+6. Scholarship, job opportunity, government program, and education links are SAFE unless they explicitly ask for money, BVN, PIN, or OTP upfront
+7. ONLY flag as SCAM when there is clear, explicit, unambiguous evidence of fraud intent
+8. http:// links (no SSL) should be flagged as SUSPICIOUS only
+9. When genuinely uncertain, choose SAFE over SUSPICIOUS for normal-looking domains
+10. Nigerian betting platforms (Bet9ja, SportyBet, BetKing) are legal — do NOT flag them as scam
+
+KNOWN SCAM SIGNALS TO DETECT:
+- Requests for BVN, NIN, ATM PIN, OTP, CVV, passwords via message or link
+- Fake CBN/government grants, Npower payments, Trader Moni, presidential empowerment
+- "You have won" messages requiring fees or personal info to claim
+- Fake bank alerts asking to click a link to verify, reactivate, or update account
+- Investment schemes promising guaranteed returns, doubling money, or daily profits
+- Named Nigerian Ponzi schemes: MMM, CBEX, Racksterli, Brisk Capital, MBA Forex, CALA Finance, BitFinance Global, NRC task earning, Chinmark Group
+- Requests to send airtime, recharge cards, gift cards, or iTunes cards as payment
+- 419 advance fee fraud — inheritance, lottery, foreign funds, next of kin
+- Typosquatted domains impersonating Nigerian banks or global platforms
+- AI deepfake celebrity investment platforms featuring Dangote, Elon Musk, Davido
+- Romance scams — soldiers/foreigners abroad asking for money transfers
+- Pig butchering crypto scams — fake trading platforms draining wallets
+- QR code phishing, fake package delivery fees, fake tech support calls
+- "Copy and paste into terminal" commands — malware installation scam
+
+Respond ONLY in this EXACT JSON format, no markdown, no backticks, no preamble:
+{"verdict":"safe","explanation":"One plain sentence max 25 words for a non-technical Nigerian."}
+
+The verdict must be exactly one of: safe, suspicious, scam`;
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      max_tokens: 200,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Content to analyze:\n"""\n${input}\n"""` },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Llama/Groq error: ${res.status}`);
+  const data = await res.json();
+  const raw = data.choices?.[0]?.message?.content || '';
+  const clean = raw.replace(/```json|```/g, '').trim();
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in Llama response');
+  return JSON.parse(jsonMatch[0]);
+}
+
+// ════════════════════════════════════════════════════════════
+// WEB-GROUNDED VERIFIER (Llama 4 via Groq Compound)
+// Used only when the fast models disagree or both flag something
+// with no blacklist/heuristic backing. Instead of guessing, this
+// actually searches the web and can visit the site to check what
+// it really is — real evidence instead of a static list guess.
+// ════════════════════════════════════════════════════════════
+async function callWebGroundedVerifier(input: string, apiKey: string) {
+  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  const systemPrompt = `You are ScamShield NG's senior fraud investigator. You have real-time web search and can visit websites.
+
+A link or message was flagged as ambiguous by faster checks. Your job is to actually investigate it before deciding — do NOT guess from the name alone.
+
+INVESTIGATION STEPS:
+1. If it's a domain/link: search for it, and where possible visit it. Check what the business/site actually is, how established it looks, and whether there are any scam reports, forum warnings, or news about it.
+2. If it's a message: search for distinctive phrases from it to see if it matches known scam campaigns, or if it matches a real, legitimate program/organization.
+3. Being unfamiliar or having no web presence is a weak signal, not proof of guilt — freshly launched legitimate Nigerian businesses, student projects, and small platforms are common and are NOT automatically scams.
+4. Only mark "scam" when you find real evidence (reports, known fraud patterns, impersonation of a real brand, requests for BVN/OTP/PIN etc). Only mark "suspicious" when something is genuinely unclear or missing basic legitimacy signals. Mark "safe" when your research supports it.
+
+Respond ONLY in this EXACT JSON format, no markdown, no preamble:
+{"verdict":"safe","explanation":"One plain sentence max 30 words for a non-technical Nigerian, mentioning what you found.","evidence":"One short phrase on what the web search showed (or 'no notable results')."}
+
+The verdict must be exactly one of: safe, suspicious, scam`;
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'groq/compound',
+      temperature: 0.1,
+      max_tokens: 500,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Content to investigate:\n"""\n${input}\n"""` },
+      ],
+      compound_custom: { tools: { enabled_tools: ['web_search', 'visit_website'] } },
+    }),
+  });
+  if (!res.ok) throw new Error(`Groq compound error: ${res.status}`);
+  const data = await res.json();
+  const raw = data.choices?.[0]?.message?.content || '';
+  const clean = raw.replace(/```json|```/g, '').trim();
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in compound response');
+  return JSON.parse(jsonMatch[0]);
+}
+
+// ════════════════════════════════════════════════════════════
+// AI CONSENSUS — runs Gemini + Llama in parallel first (fast path).
+// If they agree, that's the answer. If they disagree, or both flag
+// something with no static backing, escalate to the web-grounded
+// verifier instead of blindly picking the more cautious verdict —
+// this is what actually fixes over-flagging of unfamiliar-but-real
+// links and messages.
+// ════════════════════════════════════════════════════════════
+const VERDICT_SEVERITY: Record<string, number> = { safe: 0, suspicious: 1, scam: 2 };
+
+async function callAiConsensus(input: string, geminiKey: string, groqKey: string) {
+  const [geminiRes, llamaRes] = await Promise.allSettled([
+    geminiKey ? callGemini(input, geminiKey) : Promise.reject(new Error('no key')),
+    groqKey ? callLlama(input, groqKey) : Promise.reject(new Error('no key')),
+  ]);
+
+  const gemini = geminiRes.status === 'fulfilled' ? geminiRes.value : null;
+  const llama = llamaRes.status === 'fulfilled' ? llamaRes.value : null;
+
+  // Both failed — let the caller fall back to heuristic behavior.
+  if (!gemini && !llama) throw new Error('Both AI models unavailable');
+
+  // Only one responded — use it, but mark lower confidence.
+  if (!gemini || !llama) {
+    const only = gemini || llama;
+    return { ...only, confidence: 'single-model', modelsAgreed: null };
+  }
+
+  // Both responded and agree on "safe" — trust it, skip web lookup (fast path).
+  if (gemini.verdict === llama.verdict && gemini.verdict === 'safe') {
+    return { ...gemini, confidence: 'high', modelsAgreed: true };
+  }
+
+  // Both agree it's scam/suspicious — still worth a quick web check before
+  // committing, since both models can share the same blind spot on an
+  // unfamiliar-but-real domain. Fall through to web verification below.
+  const needsVerification = gemini.verdict !== llama.verdict || gemini.verdict !== 'safe';
+
+  if (needsVerification && groqKey) {
+    try {
+      const verified = await callWebGroundedVerifier(input, groqKey);
+      return {
+        verdict: verified.verdict,
+        explanation: verified.explanation,
+        evidence: verified.evidence,
+        confidence: 'web-verified',
+        modelsAgreed: gemini.verdict === llama.verdict,
+      };
+    } catch (err) {
+      console.error('Web-grounded verification failed, falling back:', err);
+      // fall through to the cautious-pick fallback below
+    }
+  }
+
+  // Both agree (non-safe) but verification unavailable — trust the agreement.
+  if (gemini.verdict === llama.verdict) {
+    return { ...gemini, confidence: 'high', modelsAgreed: true };
+  }
+
+  // Disagreement and verification unavailable — pick the more cautious verdict.
+  const cautious = VERDICT_SEVERITY[gemini.verdict] >= VERDICT_SEVERITY[llama.verdict] ? gemini : llama;
+  return {
+    verdict: cautious.verdict,
+    explanation: `Our AI models gave mixed signals on this, so we're erring on the side of caution: ${cautious.explanation}`,
+    confidence: 'mixed-signals',
+    modelsAgreed: false,
+  };
+}
+
+// ════════════════════════════════════════════════════════════
 // MAIN HANDLER
 // ════════════════════════════════════════════════════════════
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -453,6 +637,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (trimmed.length > 2000) return res.status(400).json({ error: 'Input too long' });
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
   const domain = extractDomain(trimmed);
 
@@ -498,12 +683,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json({ verdict: 'suspicious', explanation: 'This uses language commonly found in scam messages targeting Nigerians. Verify carefully before trusting it.', detectedBy: 'heuristic' });
   }
 
-  // Layer 5 — Gemini AI
+  // Layer 5 — AI Consensus (Gemini + Llama via Groq)
   try {
-    const geminiResult = await callGemini(trimmed, GEMINI_API_KEY);
-    return res.json({ ...geminiResult, detectedBy: 'ai' });
+    const consensusResult = await callAiConsensus(trimmed, GEMINI_API_KEY, GROQ_API_KEY);
+    return res.json({ ...consensusResult, detectedBy: 'ai-consensus' });
   } catch (err) {
-    console.error('Gemini error:', err);
+    console.error('AI consensus error:', err);
     const looksLegit = domain && !hasTyposquatting(domain) && domain.split('.').length <= 3 && !domain.includes('--');
     return res.json({
       verdict: looksLegit ? 'safe' : 'suspicious',
