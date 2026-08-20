@@ -492,7 +492,7 @@ The verdict must be exactly one of: safe, suspicious, scam`;
       'X-Title': 'ScamShield NG',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.1-405b-instruct:free',
+      model: 'openrouter/free',
       temperature: 0.1,
       max_tokens: 200,
       messages: [
@@ -503,6 +503,7 @@ The verdict must be exactly one of: safe, suspicious, scam`;
   });
   if (!res.ok) throw new Error(`Llama/OpenRouter error: ${res.status}`);
   const data = await res.json();
+  console.log('OpenRouter free-router used model:', data.model || 'unknown');
   const raw = data.choices?.[0]?.message?.content || '';
   const clean = raw.replace(/```json|```/g, '').trim();
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
