@@ -447,7 +447,8 @@ The verdict must be exactly one of: safe, suspicious, scam`;
 // OpenRouter still hosts real Llama weights (Meta) on a free tier.
 // ════════════════════════════════════════════════════════════
 async function callLlama(input: string, apiKey: string) {
-  const endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+  const CF_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '7226766389915e2946d72e4c48cd6db2';
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/v1/chat/completions`;
   const systemPrompt = `You are ScamShield NG, a cybersecurity AI trained on Nigerian and global internet scams, fraud patterns, and phishing tactics.
 
 CRITICAL RULES — FOLLOW EXACTLY:
@@ -484,10 +485,8 @@ Respond ONLY in this EXACT JSON format, no markdown, no backticks, no preamble:
 The verdict must be exactly one of: safe, suspicious, scam`;
 
   const LLAMA_CANDIDATES = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'meta-llama/llama-3.1-405b-instruct:free',
-    'meta-llama/llama-4-scout:free',
-    'meta-llama/llama-4-maverick:free',
+    '@cf/meta/llama-4-scout-17b-16e-instruct',
+    '@cf/meta/llama-3.1-8b-instruct',
   ];
 
   let lastError: Error | null = null;
@@ -498,8 +497,6 @@ The verdict must be exactly one of: safe, suspicious, scam`;
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://scamshield-ng-sentinel.vercel.app',
-          'X-Title': 'ScamShield NG',
         },
         body: JSON.stringify({
           model: modelId,
@@ -544,10 +541,10 @@ The verdict must be exactly one of: safe, suspicious, scam`;
 // ════════════════════════════════════════════════════════════
 const VERDICT_SEVERITY: Record<string, number> = { safe: 0, suspicious: 1, scam: 2 };
 
-async function callAiConsensus(input: string, geminiKey: string, openrouterKey: string) {
+async function callAiConsensus(input: string, geminiKey: string, cfKey: string) {
   const [geminiRes, llamaRes] = await Promise.allSettled([
     geminiKey ? callGemini(input, geminiKey) : Promise.reject(new Error('no GEMINI_API_KEY set')),
-    openrouterKey ? callLlama(input, openrouterKey) : Promise.reject(new Error('no OPENROUTER_API_KEY set')),
+    cfKey ? callLlama(input, cfKey) : Promise.reject(new Error('no CLOUDFLARE_API_TOKEN set')),
   ]);
 
   if (geminiRes.status === 'rejected') {
@@ -601,7 +598,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (trimmed.length > 2000) return res.status(400).json({ error: 'Input too long' });
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
+  const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || process.env.VITE_CLOUDFLARE_API_TOKEN || '';
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
   const domain = extractDomain(trimmed);
 
@@ -649,7 +646,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Layer 5 — AI Consensus (Gemini + Llama via Groq)
   try {
-    const consensusResult = await callAiConsensus(trimmed, GEMINI_API_KEY, OPENROUTER_API_KEY);
+    const consensusResult = await callAiConsensus(trimmed, GEMINI_API_KEY, CLOUDFLARE_API_TOKEN);
     return res.json({ ...consensusResult, detectedBy: 'ai-consensus' });
   } catch (err) {
     console.error('AI consensus error:', err);
