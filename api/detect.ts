@@ -483,43 +483,56 @@ Respond ONLY in this EXACT JSON format, no markdown, no backticks, no preamble:
 
 The verdict must be exactly one of: safe, suspicious, scam`;
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://scamshield-ng-sentinel.vercel.app',
-      'X-Title': 'ScamShield NG',
-    },
-    body: JSON.stringify({
-      // Try Llama models in order — OpenRouter falls back to the next one
-      // automatically if the first is unavailable/delisted, so we stay on
-      // Meta's models specifically rather than routing to any provider.
-      models: [
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'meta-llama/llama-3.1-405b-instruct:free',
-        'meta-llama/llama-4-scout:free',
-        'meta-llama/llama-4-maverick:free',
-      ],
-      temperature: 0.1,
-      max_tokens: 400,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Content to analyze:\n"""\n${input}\n"""` },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`Llama/OpenRouter error: ${res.status}`);
-  const data = await res.json();
-  console.log('OpenRouter used model:', data.model || 'unknown');
-  const raw = data.choices?.[0]?.message?.content || '';
-  const clean = raw.replace(/```json|```/g, '').trim();
-  const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error('Llama raw response (no JSON found):', raw.slice(0, 300));
-    throw new Error('No JSON in Llama response');
+  const LLAMA_CANDIDATES = [
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'meta-llama/llama-3.1-405b-instruct:free',
+    'meta-llama/llama-4-scout:free',
+    'meta-llama/llama-4-maverick:free',
+  ];
+
+  let lastError: Error | null = null;
+  for (const modelId of LLAMA_CANDIDATES) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://scamshield-ng-sentinel.vercel.app',
+          'X-Title': 'ScamShield NG',
+        },
+        body: JSON.stringify({
+          model: modelId,
+          temperature: 0.1,
+          max_tokens: 400,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Content to analyze:\n"""\n${input}\n"""` },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        lastError = new Error(`${modelId} → HTTP ${res.status}`);
+        console.error('Llama candidate failed:', lastError.message);
+        continue;
+      }
+      const data = await res.json();
+      const raw = data.choices?.[0]?.message?.content || '';
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        lastError = new Error(`${modelId} → no JSON in response: ${raw.slice(0, 200)}`);
+        console.error('Llama candidate failed:', lastError.message);
+        continue;
+      }
+      console.log('Llama answered via:', modelId);
+      return JSON.parse(jsonMatch[0]);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error('Llama candidate errored:', modelId, lastError.message);
+    }
   }
-  return JSON.parse(jsonMatch[0]);
+  throw new Error(`All Llama candidates failed. Last error: ${lastError?.message}`);
 }
 
 // ════════════════════════════════════════════════════════════
