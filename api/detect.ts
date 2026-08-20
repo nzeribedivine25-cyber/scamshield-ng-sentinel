@@ -437,10 +437,13 @@ The verdict must be exactly one of: safe, suspicious, scam`;
 }
 
 // ════════════════════════════════════════════════════════════
-// LLAMA (via Groq) — second AI opinion for the consensus layer
+// LLAMA (via OpenRouter) — second AI opinion for the consensus layer
+// Note: Groq deprecated its standalone Llama chat models in 2026,
+// and Meta shut down its own first-party Llama API on July 6, 2026.
+// OpenRouter still hosts real Llama weights (Meta) on a free tier.
 // ════════════════════════════════════════════════════════════
 async function callLlama(input: string, apiKey: string) {
-  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  const endpoint = 'https://openrouter.ai/api/v1/chat/completions';
   const systemPrompt = `You are ScamShield NG, a cybersecurity AI trained on Nigerian and global internet scams, fraud patterns, and phishing tactics.
 
 CRITICAL RULES — FOLLOW EXACTLY:
@@ -481,9 +484,11 @@ The verdict must be exactly one of: safe, suspicious, scam`;
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://scamshield-ng-sentinel.vercel.app',
+      'X-Title': 'ScamShield NG',
     },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
       temperature: 0.1,
       max_tokens: 200,
       messages: [
@@ -492,7 +497,7 @@ The verdict must be exactly one of: safe, suspicious, scam`;
       ],
     }),
   });
-  if (!res.ok) throw new Error(`Llama/Groq error: ${res.status}`);
+  if (!res.ok) throw new Error(`Llama/OpenRouter error: ${res.status}`);
   const data = await res.json();
   const raw = data.choices?.[0]?.message?.content || '';
   const clean = raw.replace(/```json|```/g, '').trim();
@@ -502,79 +507,25 @@ The verdict must be exactly one of: safe, suspicious, scam`;
 }
 
 // ════════════════════════════════════════════════════════════
-// WEB-GROUNDED VERIFIER (Llama 4 via Groq Compound)
-// Used only when the fast models disagree or both flag something
-// with no blacklist/heuristic backing. Instead of guessing, this
-// actually searches the web and can visit the site to check what
-// it really is — real evidence instead of a static list guess.
-// ════════════════════════════════════════════════════════════
-async function callWebGroundedVerifier(input: string, apiKey: string) {
-  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-  const systemPrompt = `You are ScamShield NG's senior fraud investigator. You have real-time web search and can visit websites.
-
-A link or message was flagged as ambiguous by faster checks. Your job is to actually investigate it before deciding — do NOT guess from the name alone.
-
-INVESTIGATION STEPS:
-1. If it's a domain/link: search for it, and where possible visit it. Check what the business/site actually is, how established it looks, and whether there are any scam reports, forum warnings, or news about it.
-2. If it's a message: search for distinctive phrases from it to see if it matches known scam campaigns, or if it matches a real, legitimate program/organization.
-
-DECISION RULE — follow exactly, do not shortcut this:
-- Mark "safe" ONLY if your research found POSITIVE evidence of legitimacy: real reviews, an established business presence, a working product/site with real content, coverage by real news/press, or it matches a known genuine organization/program.
-- Mark "scam" if you find real evidence of fraud: scam reports, forum/community warnings, impersonation of a real brand, or the content itself contains clear fraud signals (requests for BVN/OTP/PIN/card details, guaranteed-return investment language, advance-fee patterns, etc).
-- Mark "suspicious" if your search finds NOTHING either way — no evidence of legitimacy AND no evidence of fraud. A brand-new domain or message with zero web footprint is exactly how many real scams look before they've been reported, so absence of bad evidence is NOT the same as evidence of safety. Do not default to "safe" just because nothing bad turned up — that requires nothing bad AND something good.
-
-Respond ONLY in this EXACT JSON format, no markdown, no preamble:
-{"verdict":"safe","explanation":"One plain sentence max 30 words for a non-technical Nigerian, mentioning what you found.","evidence":"One short phrase on what the web search showed (or 'no notable results either way')."}
-
-The verdict must be exactly one of: safe, suspicious, scam`;
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'groq/compound',
-      temperature: 0.1,
-      max_tokens: 500,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Content to investigate:\n"""\n${input}\n"""` },
-      ],
-      compound_custom: { tools: { enabled_tools: ['web_search', 'visit_website'] } },
-    }),
-  });
-  if (!res.ok) throw new Error(`Groq compound error: ${res.status}`);
-  const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content || '';
-  const clean = raw.replace(/```json|```/g, '').trim();
-  const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in compound response');
-  return JSON.parse(jsonMatch[0]);
-}
-
-// ════════════════════════════════════════════════════════════
-// AI CONSENSUS — runs Gemini + Llama in parallel first (fast path).
-// If they agree, that's the answer. If they disagree, or both flag
-// something with no static backing, escalate to the web-grounded
-// verifier instead of blindly picking the more cautious verdict —
-// this is what actually fixes over-flagging of unfamiliar-but-real
-// links and messages.
+// AI CONSENSUS — runs Gemini + Llama in parallel and reconciles.
+// If they agree, that's the answer. If they disagree, pick the
+// more cautious verdict — both models are already instructed not
+// to flag unfamiliar-but-real content as suspicious/scam, so a
+// genuine disagreement is a real signal worth erring safe on.
 // ════════════════════════════════════════════════════════════
 const VERDICT_SEVERITY: Record<string, number> = { safe: 0, suspicious: 1, scam: 2 };
 
-async function callAiConsensus(input: string, geminiKey: string, groqKey: string) {
+async function callAiConsensus(input: string, geminiKey: string, openrouterKey: string) {
   const [geminiRes, llamaRes] = await Promise.allSettled([
     geminiKey ? callGemini(input, geminiKey) : Promise.reject(new Error('no GEMINI_API_KEY set')),
-    groqKey ? callLlama(input, groqKey) : Promise.reject(new Error('no GROQ_API_KEY set')),
+    openrouterKey ? callLlama(input, openrouterKey) : Promise.reject(new Error('no OPENROUTER_API_KEY set')),
   ]);
 
   if (geminiRes.status === 'rejected') {
     console.error('Gemini call failed:', geminiRes.reason?.message || geminiRes.reason);
   }
   if (llamaRes.status === 'rejected') {
-    console.error('Llama/Groq call failed:', llamaRes.reason?.message || llamaRes.reason);
+    console.error('Llama/OpenRouter call failed:', llamaRes.reason?.message || llamaRes.reason);
   }
 
   const gemini = geminiRes.status === 'fulfilled' ? geminiRes.value : null;
@@ -589,38 +540,12 @@ async function callAiConsensus(input: string, geminiKey: string, groqKey: string
     return { ...only, confidence: 'single-model', modelsAgreed: null };
   }
 
-  // Both responded and agree on "safe" — trust it, skip web lookup (fast path).
-  if (gemini.verdict === llama.verdict && gemini.verdict === 'safe') {
-    return { ...gemini, confidence: 'high', modelsAgreed: true };
-  }
-
-  // Both agree it's scam/suspicious — still worth a quick web check before
-  // committing, since both models can share the same blind spot on an
-  // unfamiliar-but-real domain. Fall through to web verification below.
-  const needsVerification = gemini.verdict !== llama.verdict || gemini.verdict !== 'safe';
-
-  if (needsVerification && groqKey) {
-    try {
-      const verified = await callWebGroundedVerifier(input, groqKey);
-      return {
-        verdict: verified.verdict,
-        explanation: verified.explanation,
-        evidence: verified.evidence,
-        confidence: 'web-verified',
-        modelsAgreed: gemini.verdict === llama.verdict,
-      };
-    } catch (err) {
-      console.error('Web-grounded verification failed, falling back:', err);
-      // fall through to the cautious-pick fallback below
-    }
-  }
-
-  // Both agree (non-safe) but verification unavailable — trust the agreement.
+  // Both responded and agree — high confidence.
   if (gemini.verdict === llama.verdict) {
     return { ...gemini, confidence: 'high', modelsAgreed: true };
   }
 
-  // Disagreement and verification unavailable — pick the more cautious verdict.
+  // Disagreement — pick the more cautious verdict, and say so plainly.
   const cautious = VERDICT_SEVERITY[gemini.verdict] >= VERDICT_SEVERITY[llama.verdict] ? gemini : llama;
   return {
     verdict: cautious.verdict,
@@ -647,7 +572,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (trimmed.length > 2000) return res.status(400).json({ error: 'Input too long' });
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-  const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
   const domain = extractDomain(trimmed);
 
@@ -695,7 +620,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Layer 5 — AI Consensus (Gemini + Llama via Groq)
   try {
-    const consensusResult = await callAiConsensus(trimmed, GEMINI_API_KEY, GROQ_API_KEY);
+    const consensusResult = await callAiConsensus(trimmed, GEMINI_API_KEY, OPENROUTER_API_KEY);
     return res.json({ ...consensusResult, detectedBy: 'ai-consensus' });
   } catch (err) {
     console.error('AI consensus error:', err);
