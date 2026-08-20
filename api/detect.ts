@@ -492,9 +492,17 @@ The verdict must be exactly one of: safe, suspicious, scam`;
       'X-Title': 'ScamShield NG',
     },
     body: JSON.stringify({
-      model: 'openrouter/free',
+      // Try Llama models in order — OpenRouter falls back to the next one
+      // automatically if the first is unavailable/delisted, so we stay on
+      // Meta's models specifically rather than routing to any provider.
+      models: [
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'meta-llama/llama-3.1-405b-instruct:free',
+        'meta-llama/llama-4-scout:free',
+        'meta-llama/llama-4-maverick:free',
+      ],
       temperature: 0.1,
-      max_tokens: 200,
+      max_tokens: 400,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Content to analyze:\n"""\n${input}\n"""` },
@@ -503,11 +511,14 @@ The verdict must be exactly one of: safe, suspicious, scam`;
   });
   if (!res.ok) throw new Error(`Llama/OpenRouter error: ${res.status}`);
   const data = await res.json();
-  console.log('OpenRouter free-router used model:', data.model || 'unknown');
+  console.log('OpenRouter used model:', data.model || 'unknown');
   const raw = data.choices?.[0]?.message?.content || '';
   const clean = raw.replace(/```json|```/g, '').trim();
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in Llama response');
+  if (!jsonMatch) {
+    console.error('Llama raw response (no JSON found):', raw.slice(0, 300));
+    throw new Error('No JSON in Llama response');
+  }
   return JSON.parse(jsonMatch[0]);
 }
 
