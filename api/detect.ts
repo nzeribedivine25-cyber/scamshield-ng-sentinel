@@ -424,7 +424,7 @@ The verdict must be exactly one of: safe, suspicious, scam`;
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 200 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 500, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
   if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
@@ -432,7 +432,11 @@ The verdict must be exactly one of: safe, suspicious, scam`;
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const clean = raw.replace(/```json|```/g, '').trim();
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in Gemini response');
+  if (!jsonMatch) {
+    const blockReason = data.promptFeedback?.blockReason;
+    const finishReason = data.candidates?.[0]?.finishReason;
+    throw new Error(`No JSON in Gemini response (finishReason=${finishReason || 'none'}, blockReason=${blockReason || 'none'})`);
+  }
   return JSON.parse(jsonMatch[0]);
 }
 
@@ -488,7 +492,7 @@ The verdict must be exactly one of: safe, suspicious, scam`;
       'X-Title': 'ScamShield NG',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      model: 'meta-llama/llama-3.1-405b-instruct:free',
       temperature: 0.1,
       max_tokens: 200,
       messages: [
